@@ -1,77 +1,78 @@
 #include "reassembler.hh"
+
+#include <algorithm>
 #include <cstdint>
-#include <iostream>
-#include <sys/types.h>
+#include <string>
 
 using namespace std;
 
-void Reassembler::pop(Writer& output){
-  uint64_t len = output.available_capacity();
-  if (len > buffered - popped) {
-    len = buffered - popped;
-  }
-  //cerr << output.available_capacity() << " " << buffered << " " << popped << " " << len << endl;
-  if (len > 0) {
-    uint64_t l = popped % capacity;
-    uint64_t r = (l + len) % capacity;
-    if (l < r) {
-      output.push(buf.substr(l, r-l));
-      for (uint64_t i = l; i < r; ++i) {
-        is_value[i] = false;
-      }
-    } else {
-      output.push(buf.substr(l, capacity - l));
-      output.push(buf.substr(0, r));
-      for (uint64_t i = l; i < capacity; ++i) {
-        is_value[i] = false;
-      }
-      for (uint64_t i = 0; i < r; ++i) {
-        is_value[i] = false;
-      }
+void Reassembler::pop( Writer& output )
+{
+  const uint64_t limit = min( output.available_capacity(), bytes_pending_ );
+  if ( limit == 0 ) {
+    if ( endpos_set && next_expected == endpos ) {
+      output.close();
     }
+    return;
   }
-  popped += len;
-  bytes_pending_ -= len;
-  if (endpos_set && popped == endpos) {
+
+  string assembled {};
+  assembled.reserve( limit );
+
+  while ( assembled.size() < limit ) {
+    const uint64_t slot = next_expected % capacity_;
+    if ( !is_value[slot] ) {
+      break;
+    }
+
+    assembled.push_back( buf[slot] );
+    is_value[slot] = false;
+    ++next_expected;
+    --bytes_pending_;
+  }
+
+  if ( !assembled.empty() ) {
+    output.push( std::move( assembled ) );
+  }
+
+  if ( endpos_set && next_expected == endpos ) {
     output.close();
   }
 }
 
-void Reassembler::insert( uint64_t first_index, string data, bool is_last_substring, Writer& output )
+void Reassembler::insert( uint64_t first_index, string data_in, bool is_last_substring, Writer& output )
 {
-  // Your code here.
-  if (is_last_substring) {
+  if ( capacity_ == 0 ) {
+    // 初始容量为接收端内部 ByteStream 的写接口容量
+    capacity_ = output.available_capacity();
+    buf.resize( capacity_ );
+    is_value.resize( capacity_, false );
+  }
+
+  if ( is_last_substring ) {
     endpos_set = true;
-    endpos = first_index + data.size();
+    endpos = first_index + data_in.size();
   }
-  pop(output);
-  if (data.empty() || first_index >= popped + output.available_capacity()) {
-    return;
-  }
-  uint64_t rpos = first_index + data.size();
-  if (rpos > popped + output.available_capacity()) {
-    rpos = popped + output.available_capacity();
-  }
-  for (uint64_t i = first_index, pos = first_index % capacity; i < rpos; ++i, pos = pos + 1 == capacity ? 0 : pos + 1) {
-    buf[pos] = data[i - first_index];
-    if (!is_value[pos] && i >= popped && i < pending_pos) {
-      bytes_pending_ += 1;
+
+  const uint64_t window_begin = next_expected;
+  const uint64_t window_end = next_expected + output.available_capacity();
+  const uint64_t data_end = first_index + data_in.size();
+  const uint64_t insert_begin = max( first_index, window_begin );
+  const uint64_t insert_end = min( data_end, window_end );
+
+  for ( uint64_t idx = insert_begin; idx < insert_end; ++idx ) {
+    const uint64_t slot = idx % capacity_;
+    if ( !is_value[slot] ) {
+      is_value[slot] = true;
+      buf[slot] = data_in[idx - first_index];
+      ++bytes_pending_;
     }
-    is_value[pos] = true;
   }
-  while(buffered < popped + capacity && is_value[buffered%capacity]) {
-    buffered += 1;
-  }
-  uint64_t pending_pos_new = popped + output.available_capacity();
-  while (pending_pos < pending_pos_new) {
-    bytes_pending_ += is_value[(pending_pos++)%capacity];
-  }
-  pop(output);
-  //cerr << first_index << " " << data << " " << len << " " << buffered << endl;
+
+  pop( output );
 }
 
 uint64_t Reassembler::bytes_pending() const
 {
-  // Your code here.
   return bytes_pending_;
 }
