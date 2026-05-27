@@ -13,16 +13,17 @@
 using namespace std;
 
 /* TCPSender constructor (uses a random ISN if none given) */
+// 初始重传超时时间和序列起始序号
 TCPSender::TCPSender( uint64_t initial_RTO_ms, optional<Wrap32> fixed_isn )
   : isn_( fixed_isn.value_or( Wrap32 { random_device()() } ) ), initial_RTO_ms_( initial_RTO_ms ), rto(initial_RTO_ms)
 {}
-
+// 已发送但还未收到 ACK 确认的字节数
 uint64_t TCPSender::sequence_numbers_in_flight() const
 {
   // Your code here.
   return seqno - ackno;
 }
-
+// 发送端连续重传的次数
 uint64_t TCPSender::consecutive_retransmissions() const
 {
   // Your code here.
@@ -35,7 +36,8 @@ optional<TCPSenderMessage> TCPSender::maybe_send()
   while (!mq.empty()) {
     auto msgp = mq.front();
     mq.pop();
-    if (msgp->seqno.unwrap(isn_, ackno)+msgp->sequence_length() > ackno) {
+    // 是否有值大于ackno
+    if (msgp->seqno.unwrap(isn_, ackno) + msgp->sequence_length() > ackno) {
       return *msgp;
     } 
   }
@@ -48,19 +50,24 @@ void TCPSender::push( Reader& outbound_stream )
   do{
     string m;
     uint64_t len = window_size;
+    // TCP 在窗口为 0 时，发送方不能无限沉默，通常仍会尝试发一个很小的探测段，看看窗口是否重新打开
     if (len < 1) {
       len = 1;
     }
     if (len < seqno - ackno) {
       len = 0;
     } else {
+      // 减掉当前已经在飞的字节数
       len -= seqno - ackno;
     }
+    // 是否因为报文大小上限中断，用在 FIN 的判断
     bool cantake = false;
+    // 单个报文最多装多少 payload
     if (len > TCPConfig::MAX_PAYLOAD_SIZE) {
       len = TCPConfig::MAX_PAYLOAD_SIZE;
       cantake = true;
     }
+    // 拼接
     while (len) {
       string_view sv = outbound_stream.peek();
       if (sv.empty()) {
@@ -77,13 +84,11 @@ void TCPSender::push( Reader& outbound_stream )
       }
     }
     bool syn = seqno == 0;
+    // 只有窗口里还有空间时，才能把 FIN 放进去
     bool fin = !fin_send && outbound_stream.is_finished() && (len > 0 || cantake);
-    //cerr << syn << " " << fin << " " << window_size << " " << m.length() << " " << ackno << " " << len << endl;
-    //cerr << outbound_stream.bytes_popped() << " "<< outbound_stream.bytes_buffered() << endl;
     if (!syn && !fin && m.empty()) {
       return;
     }
-    //window_size -= m.size()+fin;
     auto sp = make_shared<TCPSenderMessage>(Wrap32::wrap(seqno, isn_), syn, m, fin);
     mq.push(sp);
     if (wq.empty()) {
@@ -91,7 +96,8 @@ void TCPSender::push( Reader& outbound_stream )
     }
     wq.push(sp);
     seqno += syn + m.size()+ (fin && !fin_send);
-    fin_send |= fin; //outbound_stream.is_finished();
+    fin_send |= fin; 
+    // 窗口还有剩余空间
   }while(window_size > seqno - ackno && !outbound_stream.peek().empty());
 }
 
@@ -105,7 +111,8 @@ void TCPSender::receive( const TCPReceiverMessage& msg )
 {
   // Your code here.
   uint64_t ack = msg.ackno.value_or(isn_).unwrap(isn_, ackno);
-  //cerr << "ackno = " << ackno << endl;
+  // seqno 是发送端目前已经发送到的最远位置，判断ack是否合法
+  // reassembler保证不会产生空缺，收到的内容会保留
   if (ack <= seqno) {
     if (ack > ackno) {
       ackno = ack;
@@ -113,19 +120,16 @@ void TCPSender::receive( const TCPReceiverMessage& msg )
       failed_cnt = 0;
       start_time = time_point;
     }
-    
   }
   window_size = msg.window_size;
-  /*while (!mq.empty() && mq.front().seqno.unwrap(isn_, ackno) < ackno) {
-    mq.pop();
-  }*/
 }
 
 void TCPSender::tick( const size_t ms_since_last_tick )
 {
   // Your code here.
   time_point += ms_since_last_tick;
-  while (!wq.empty() && wq.front()->seqno.unwrap(isn_, ackno)+wq.front()->sequence_length() <= ackno) {
+  while (!wq.empty() &&
+   wq.front()->seqno.unwrap(isn_, ackno) + wq.front()->sequence_length() <= ackno) {
     wq.pop();
   }
   if (!wq.empty() && time_point >= start_time + rto) {

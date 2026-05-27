@@ -11,6 +11,7 @@
 class Wrap32
 {
 protected:
+  // 32位序列号
   uint32_t raw_value_ {};
 
 public:
