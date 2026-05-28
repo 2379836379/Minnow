@@ -29,19 +29,11 @@ NetworkInterface::NetworkInterface( const EthernetAddress& ethernet_address, con
 // Address::ipv4_numeric() method.
 void NetworkInterface::send_datagram( const InternetDatagram& dgram, const Address& next_hop )
 {
+  // 下一跳 IP 取成 32 位整数
   auto next_hop_i = next_hop.ipv4_numeric();
-  /*auto p = ip_to_eth.find(next_hop_i);
-  bool flag = p == ip_to_eth.end() || time_point>=p->second.get_time_point+30000;
-  bool send_arp = p == ip_to_eth.end() || 
-    (time_point>=p->second.get_time_point+30000 && time_point>=p->second.query_time_point+5000);
-  if (p!=ip_to_eth.end()) {
-    cerr << send_arp << " "
-    << (time_point>=p->second.get_time_point+30000) << " "
-    <<  (time_point>=p->second.query_time_point+30000) << " "
-    << time_point << " " << p->second.query_time_point
-    << endl;
-  }*/
+  // 取出这个 IP 对应的 ARP 缓存项
   ip_to_eth_item &q = ip_to_eth[next_hop_i];
+  // 当前映射是否不可用
   bool flag = !q.address_initialized || time_point>=q.get_time_point+30000;
   bool send_arp = (!q.address_initialized || time_point>=q.get_time_point+30000) && 
   (!q.query_initialized || time_point>=q.query_time_point+5000);
@@ -83,6 +75,8 @@ void NetworkInterface::send_queued_datagram(ip_to_eth_item& item) {
   item.wd.clear();
 }
 // frame: the incoming Ethernet frame
+// 处理收到的 Ethernet frame；
+// 如果里面装的是发给我的 IPv4 数据报，就把它交给上层；如果是 ARP，就在本层处理
 optional<InternetDatagram> NetworkInterface::recv_frame( const EthernetFrame& frame )
 {
   const auto& dst_addr = frame.header.dst;
@@ -95,6 +89,7 @@ optional<InternetDatagram> NetworkInterface::recv_frame( const EthernetFrame& fr
       return ret;
     }
     cerr << "Parse IPv4 failed from: " << to_string(dst_addr) << endl;
+    return {};
   }
   // ARP
   ARPMessage msg;
@@ -106,6 +101,7 @@ optional<InternetDatagram> NetworkInterface::recv_frame( const EthernetFrame& fr
   p.ethernet_address = msg.sender_ethernet_address;
   p.get_time_point = time_point;
   p.address_initialized = true;
+  // 如果这是问我的 ARP request，就回一个 ARP reply
   if (msg.opcode == ARPMessage::OPCODE_REQUEST && msg.target_ip_address == ip_address_.ipv4_numeric()){
     auto reply = msg;
     reply.opcode = ARPMessage::OPCODE_REPLY;
@@ -135,7 +131,7 @@ optional<EthernetFrame> NetworkInterface::maybe_send()
   if(mq.empty()){
     return std::nullopt;
   }
-  auto w=mq.front();
+  auto w = mq.front();
   mq.pop();
   return *w;
 }
