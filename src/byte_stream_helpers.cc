@@ -2,6 +2,7 @@
 
 #include <cstdint>
 #include <stdexcept>
+#include <string>
 
 /*
  * read: A helper function thats peeks and pops up to `len` bytes

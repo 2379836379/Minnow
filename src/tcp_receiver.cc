@@ -47,11 +47,11 @@ TCPReceiverMessage TCPReceiver::send( const Writer& inbound_stream ) const
   // 当前接收缓冲区还能装多少数据
   uint64_t capacity = inbound_stream.available_capacity();
   // 剩余容量
-  uint16_t window_size = static_cast<uint16_t>(std::min(capacity, static_cast<uint64_t>(UINT16_MAX)));
-  
-  if (!zero_point_set) {
-    return {std::nullopt, window_size};
-  } 
+  uint16_t window_size = static_cast<uint16_t>( std::min( capacity, static_cast<uint64_t>( UINT16_MAX ) ) );
+
+  if ( !zero_point_set ) {
+    return { std::nullopt, window_size };
+  }
   // 包装下一个还期望收到的 TCP 序号
-  return {Wrap32::wrap(ackno, zero_point), window_size};
+  return { Wrap32::wrap( ackno, zero_point ), window_size };
 }

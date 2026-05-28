@@ -12,21 +12,21 @@ using namespace std;
 void get_URL( const string& host, const string& path )
 {
   cerr << "Function called: get_URL(" << host << ", " << path << ")\n";
-  //cerr << "Warning: get_URL() has not been implemented yet.\n";
-  Address address(host, "http");
+  // cerr << "Warning: get_URL() has not been implemented yet.\n";
+  Address address( host, "http" );
   TCPSocket sock;
-  sock.connect(address);
-  sock.write("GET " + path + " HTTP/1.1\r\n");
-  sock.write("Host: " + host + "\r\n");
-  sock.write("Connection: close\r\n");
-  sock.write("\r\n");
+  sock.connect( address );
+  sock.write( "GET " + path + " HTTP/1.1\r\n" );
+  sock.write( "Host: " + host + "\r\n" );
+  sock.write( "Connection: close\r\n" );
+  sock.write( "\r\n" );
   string ret;
-  while(!sock.eof()){
+  while ( !sock.eof() ) {
     string buffer;
-    sock.read(buffer);
-    if(!buffer.empty()){
-      cout<<buffer;
-    }else{
+    sock.read( buffer );
+    if ( !buffer.empty() ) {
+      cout << buffer;
+    } else {
       break;
     }
   }

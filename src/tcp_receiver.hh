@@ -9,11 +9,12 @@
 class TCPReceiver
 {
 private:
-  //uint64_t checkpoint = 0;
-  Wrap32 zero_point{0};
+  // uint64_t checkpoint = 0;
+  Wrap32 zero_point { 0 };
   uint64_t ackno = 0;
   uint64_t endno = -1;
   bool zero_point_set = false;
+
 public:
   /*
    * The TCPReceiver receives TCPSenderMessages, inserting their payload into the Reassembler

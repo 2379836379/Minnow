@@ -33,9 +33,10 @@ class TCPSender
   // FIN 是否已经发出
   bool fin_send = false;
   // 待发送队列，maybe_send() 从这里拿包发出去
-  std::queue<std::shared_ptr<TCPSenderMessage>> mq{};
+  std::queue<std::shared_ptr<TCPSenderMessage>> mq {};
   // 已发送但未确认队列，用来跟踪重传
-  std::queue<std::shared_ptr<TCPSenderMessage>> wq{};
+  std::queue<std::shared_ptr<TCPSenderMessage>> wq {};
+
 public:
   /* Construct TCP sender with given default Retransmission Timeout and possible ISN */
   TCPSender( uint64_t initial_RTO_ms, std::optional<Wrap32> fixed_isn );

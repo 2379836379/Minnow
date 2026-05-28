@@ -1,30 +1,37 @@
 #include <cassert>
 #include <cstdint>
-#include <iostream>
-#include <stdexcept>
+#include <algorithm>      
+#include <string_view>    
 
 #include "byte_stream.hh"
 
 using namespace std;
 
-ByteStream::ByteStream( uint64_t capacity ) : capacity_( capacity ), 
-  //left读指针
-  lpos(0),
-  // right 写指针 
-  rpos(0), buf(), is_closed_(false), error_(false) {
-  buf.resize(capacity_);
+ByteStream::ByteStream( uint64_t capacity )
+  : capacity_( capacity )
+  ,
+  // left读指针
+  lpos( 0 )
+  ,
+  // right 写指针
+  rpos( 0 )
+  ,buf()
+  , is_closed_( false )
+  , error_( false )
+{
+  buf.resize( capacity_ );
 }
 
 void Writer::push( string data )
 {
   // Your code here.
-  //assert(data.size() + rpos - lpos <= capacity_);
-  if(capacity_ == 0 || data.empty()){
+  // assert(data.size() + rpos - lpos <= capacity_);
+  if ( capacity_ == 0 || data.empty() ) {
     return;
   }
-  uint64_t len = min<uint64_t>(available_capacity(), data.size());
-  for(uint64_t i = 0; i < len; ++i){
-    buf[(rpos)%capacity_] = data[i];
+  const uint64_t len = min<uint64_t>( available_capacity(), data.size() );
+  for ( uint64_t i = 0; i < len; ++i ) {
+    buf[( rpos ) % capacity_] = data[i];
     rpos++;
   }
 }
@@ -50,7 +57,7 @@ bool Writer::is_closed() const
 uint64_t Writer::available_capacity() const
 {
   // Your code here.
-  return capacity_ - (rpos - lpos);
+  return capacity_ - ( rpos - lpos );
 }
 
 uint64_t Writer::bytes_pushed() const
@@ -62,16 +69,17 @@ uint64_t Writer::bytes_pushed() const
 string_view Reader::peek() const
 {
   // Your code here.
-  if (lpos == rpos) {
+  if ( lpos == rpos ) {
     return "";
   }
-  uint64_t r = rpos % capacity_;
-  uint64_t l = lpos % capacity_;
-  if (l < r) {
-    return {buf.data() + l, r - l};
+  const uint64_t r = rpos % capacity_;
+  const uint64_t l = lpos % capacity_;
+  if ( l < r ) {
+    return { buf.data() + l, r - l };
+    
   } else {
-    //不考虑回绕部分
-    return {buf.data() + l, capacity_ - l};
+    // 不考虑回绕部分
+    return { buf.data() + l, capacity_ - l };
   }
 }
 

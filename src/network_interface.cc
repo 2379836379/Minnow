@@ -32,45 +32,46 @@ void NetworkInterface::send_datagram( const InternetDatagram& dgram, const Addre
   // 下一跳 IP 取成 32 位整数
   auto next_hop_i = next_hop.ipv4_numeric();
   // 取出这个 IP 对应的 ARP 缓存项
-  ip_to_eth_item &q = ip_to_eth[next_hop_i];
+  ip_to_eth_item& q = ip_to_eth[next_hop_i];
   // 当前映射是否不可用
-  bool flag = !q.address_initialized || time_point>=q.get_time_point+30000;
-  bool send_arp = (!q.address_initialized || time_point>=q.get_time_point+30000) && 
-  (!q.query_initialized || time_point>=q.query_time_point+5000);
-  if (send_arp) {
+  bool flag = !q.address_initialized || time_point >= q.get_time_point + 30000;
+  bool send_arp = ( !q.address_initialized || time_point >= q.get_time_point + 30000 )
+                  && ( !q.query_initialized || time_point >= q.query_time_point + 5000 );
+  if ( send_arp ) {
     // arp
     ARPMessage req;
     req.opcode = ARPMessage::OPCODE_REQUEST;
     req.sender_ip_address = ip_address_.ipv4_numeric();
     req.sender_ethernet_address = ethernet_address_;
     req.target_ip_address = next_hop_i;
-    EthernetHeader header = {ETHERNET_BROADCAST, ethernet_address_, EthernetHeader::TYPE_ARP};
-    auto msg=make_shared<EthernetFrame>(header, serialize(req));
-    mq.push(msg);
-    q.query_time_point=time_point;
+    EthernetHeader header = { ETHERNET_BROADCAST, ethernet_address_, EthernetHeader::TYPE_ARP };
+    auto msg = make_shared<EthernetFrame>( header, serialize( req ) );
+    mq.push( msg );
+    q.query_time_point = time_point;
     q.query_initialized = true;
   }
-  if (flag) {
-    auto sp=std::make_shared<wait_eth>(dgram, next_hop_i);
-    wq.push(std::make_pair(sp, time_point));
-    q.wd.emplace_back(sp);
+  if ( flag ) {
+    auto sp = std::make_shared<wait_eth>( dgram, next_hop_i );
+    wq.push( std::make_pair( sp, time_point ) );
+    q.wd.emplace_back( sp );
     return;
   }
   cerr << "send a frame" << endl;
-  EthernetHeader header = {q.ethernet_address, ethernet_address_, EthernetHeader::TYPE_IPv4};
-  auto msg=make_shared<EthernetFrame>(header, serialize(dgram));
-  mq.push(msg);
+  EthernetHeader header = { q.ethernet_address, ethernet_address_, EthernetHeader::TYPE_IPv4 };
+  auto msg = make_shared<EthernetFrame>( header, serialize( dgram ) );
+  mq.push( msg );
 }
 
-void NetworkInterface::send_queued_datagram(ip_to_eth_item& item) {
-  for (const auto &p: item.wd) {
+void NetworkInterface::send_queued_datagram( ip_to_eth_item& item )
+{
+  for ( const auto& p : item.wd ) {
     auto q = p.lock();
-    if (!q) {
+    if ( !q ) {
       continue;
     }
-    EthernetHeader header = {item.ethernet_address, ethernet_address_, EthernetHeader::TYPE_IPv4};
-    auto msg=make_shared<EthernetFrame>(header, serialize(q->data));
-    mq.push(msg);
+    EthernetHeader header = { item.ethernet_address, ethernet_address_, EthernetHeader::TYPE_IPv4 };
+    auto msg = make_shared<EthernetFrame>( header, serialize( q->data ) );
+    mq.push( msg );
   }
   item.wd.clear();
 }
@@ -80,40 +81,40 @@ void NetworkInterface::send_queued_datagram(ip_to_eth_item& item) {
 optional<InternetDatagram> NetworkInterface::recv_frame( const EthernetFrame& frame )
 {
   const auto& dst_addr = frame.header.dst;
-  if(dst_addr != ethernet_address_ && dst_addr != ETHERNET_BROADCAST) {
+  if ( dst_addr != ethernet_address_ && dst_addr != ETHERNET_BROADCAST ) {
     return {};
   }
-  if(frame.header.type == EthernetHeader::TYPE_IPv4){
+  if ( frame.header.type == EthernetHeader::TYPE_IPv4 ) {
     InternetDatagram ret;
-    if(parse(ret, frame.payload)) {
+    if ( parse( ret, frame.payload ) ) {
       return ret;
     }
-    cerr << "Parse IPv4 failed from: " << to_string(dst_addr) << endl;
+    cerr << "Parse IPv4 failed from: " << to_string( dst_addr ) << endl;
     return {};
   }
   // ARP
   ARPMessage msg;
-  if(!parse(msg, frame.payload)) {
-    cerr << "Parse ARP failed from: " << to_string(dst_addr) << endl;
+  if ( !parse( msg, frame.payload ) ) {
+    cerr << "Parse ARP failed from: " << to_string( dst_addr ) << endl;
     return {};
   }
-  ip_to_eth_item &p = ip_to_eth[msg.sender_ip_address];
+  ip_to_eth_item& p = ip_to_eth[msg.sender_ip_address];
   p.ethernet_address = msg.sender_ethernet_address;
   p.get_time_point = time_point;
   p.address_initialized = true;
   // 如果这是问我的 ARP request，就回一个 ARP reply
-  if (msg.opcode == ARPMessage::OPCODE_REQUEST && msg.target_ip_address == ip_address_.ipv4_numeric()){
+  if ( msg.opcode == ARPMessage::OPCODE_REQUEST && msg.target_ip_address == ip_address_.ipv4_numeric() ) {
     auto reply = msg;
     reply.opcode = ARPMessage::OPCODE_REPLY;
     reply.sender_ip_address = ip_address_.ipv4_numeric();
     reply.sender_ethernet_address = ethernet_address_;
     reply.target_ip_address = msg.sender_ip_address;
     reply.target_ethernet_address = msg.sender_ethernet_address;
-    EthernetHeader header{msg.sender_ethernet_address, ethernet_address_, EthernetHeader::TYPE_ARP};
-    auto rep = std::make_shared<EthernetFrame>(header, serialize(reply));
-    mq.push(rep);
+    EthernetHeader header { msg.sender_ethernet_address, ethernet_address_, EthernetHeader::TYPE_ARP };
+    auto rep = std::make_shared<EthernetFrame>( header, serialize( reply ) );
+    mq.push( rep );
   }
-  send_queued_datagram(p);
+  send_queued_datagram( p );
   return {};
 }
 
@@ -121,14 +122,14 @@ optional<InternetDatagram> NetworkInterface::recv_frame( const EthernetFrame& fr
 void NetworkInterface::tick( const size_t ms_since_last_tick )
 {
   time_point += ms_since_last_tick;
-  while (!wq.empty() && time_point >= wq.front().second + 60'000) {
+  while ( !wq.empty() && time_point >= wq.front().second + 60'000 ) {
     wq.pop();
   }
 }
 
 optional<EthernetFrame> NetworkInterface::maybe_send()
 {
-  if(mq.empty()){
+  if ( mq.empty() ) {
     return std::nullopt;
   }
   auto w = mq.front();

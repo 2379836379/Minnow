@@ -19,6 +19,7 @@ protected:
   std::string buf;
   bool is_closed_;
   bool error_;
+
 public:
   explicit ByteStream( uint64_t capacity );
 
